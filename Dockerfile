@@ -1,4 +1,4 @@
-FROM elixir
+FROM elixir:alpine
 
 EXPOSE 7070
 
