@@ -1,4 +1,4 @@
-FROM elixir:alpine
+FROM elixir:1.9.4
 
 EXPOSE 7070
 
