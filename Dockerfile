@@ -3,6 +3,7 @@ FROM elixir:1.9.4
 EXPOSE 7070
 
 RUN useradd -r -s /bin/bash -m -d /var/lib/cpcache cpcache && \
+    apt-get install build-essential && \
     mkdir -p /var/cache/cpcache/state && \
     mkdir /etc/cpcache && \
     mkdir -p /var/cache/cpcache/pkg/community/os/x86_64 && \
