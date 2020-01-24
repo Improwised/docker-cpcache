@@ -25,10 +25,10 @@ COPY --chown=cpcache:cpcache cpcache /var/lib/cpcache/
 COPY cpcache/conf/cpcache.toml /etc/cpcache/
 
 USER cpcache
-# RUN mix local.hex --force && \
-#     mix local.rebar --force && \
-#     mix deps.get && \
-#     mix compile
+RUN mix local.hex --force && \
+    mix local.rebar --force && \
+    mix deps.get && \
+    mix compile
 
-# ENV MIX_ENV=prod
-# ENTRYPOINT iex -S mix
+ENV MIX_ENV=prod
+ENTRYPOINT iex -S mix
