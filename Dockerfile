@@ -1,8 +1,15 @@
 FROM elixir:1.9.4
 
-EXPOSE 7070
+RUN cd $HOME && \
+    git clone https://github.com/nroi/cpcache.git && \
+    cd cpcache/cpcache && \
+    mix local.hex --force && \
+    mix local.rebar --force && \
+    mix deps.get && \
+    mv ../../cpcache /var/lib && \
+    mix compile
 
-RUN useradd -r -s /bin/bash -m -d /var/lib/cpcache cpcache && \
+RUN useradd -r -s /bin/bash -m -d $HOME/cpcache cpcache && \
     mkdir -p /var/cache/cpcache/state && \
     mkdir /etc/cpcache && \
     mkdir -p /var/cache/cpcache/pkg/community/os/x86_64 && \
@@ -18,16 +25,12 @@ RUN useradd -r -s /bin/bash -m -d /var/lib/cpcache cpcache && \
     mkdir -p /var/cache/cpcache/pkg/testing/os/x86_64 && \
     chown -R cpcache:cpcache "/var/cache/cpcache"
 
-WORKDIR /var/lib/cpcache
+WORKDIR /var/lib/cpcache/cpcache
 
-COPY --chown=cpcache:cpcache cpcache /var/lib/cpcache/
-COPY cpcache/conf/cpcache.toml /etc/cpcache/
+RUN cp conf/cpcache.toml /etc/cpcache/
 
-USER cpcache
-RUN mix local.hex --force && \
-    mix local.rebar --force && \
-    mix deps.get && \
-    mix compile
+EXPOSE 7070
 
 ENV MIX_ENV=prod
+
 ENTRYPOINT iex -S mix
