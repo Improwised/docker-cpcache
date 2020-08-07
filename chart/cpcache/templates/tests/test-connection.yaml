@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "cpcache.fullname" . }}-test-connection"
+  labels:
+{{ include "cpcache.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['{{ include "cpcache.fullname" . }}:{{ .Values.service.port }}']
+  restartPolicy: Never

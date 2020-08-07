@@ -1,0 +1,251 @@
+---
+# Source: cpcache/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpcache-configmap
+  namespace: cpcache
+data:
+  cpcache.toml: |
+    # Note that cpcache relies on the directory structure that is created in
+    # /var/cache/cpcache during install. If you change this setting, copy the
+    # contents to the new directory and make sure user cpcache has read- and
+    # write-access.
+    cache_directory = "/var/cache/cpcache"
+
+    # The port to listen on.
+    # TODO Perhaps change it to some other port, like 7038. 7070 is already
+    # reserved.
+    port = 7070
+
+    # The selection method to choose a mirror. Valid values are:
+    #   "auto": In order to attempt to find suitable mirrors automatically.
+    #           With this method, performance tests are run on the official mirrors
+    #           to select only sufficiently fast mirrors.
+    #   "predefined": To only choose the mirrors defined for the variable
+    #                 mirrors_predefined (see below).
+    mirror_selection_method = "auto"
+
+    # In case no suitable mirror could be found automatically, cpcache will attempt
+    # to download files from the following mirrors. This list can be empty if
+    # mirror_selection_method has been set to "auto".
+    mirrors_predefined = []
+
+    # The method to choose suitable mirrors automatically may not always work
+    # perfectly. If one of the automatically chosen mirrors turns out to be slow or
+    # unstable, add it to this list.
+    mirrors_blacklist = []
+
+    localrepos = [
+        # If you use local repositories such as aurto, add them here.
+        # "aurto",
+    ]
+
+    # Various settings that apply if mirror_selection_method has been set to "auto".
+    [mirrors_auto]
+        # only use mirrors with HTTPS support.
+        https_required = false
+        # mirrors must support IPv4.
+        ipv4 = true
+        # mirrors must support IPv6.
+        ipv6 = false
+        # The maximum score allowed from a mirror. See
+        # https://www.archlinux.org/mirrors/status/ for an explanation of this
+        # metric.
+        max_score = 2.5
+        # The maximum number of mirrors to use and test for latency. Increasing this
+        # number will also increase the startup time of cpcache (due to the latency
+        # tests), but it might also give you a faster mirror.
+        num_mirrors = 8
+        # Valid values for this setting include "sort" and "random".  After the
+        # mirrors have been filtered according to your chosen criteria (e.g. ipv6
+        # supported, score not more than 2.5), you will most likely still have more
+        # than num_mirrors mirrors. This setting determines the strategy for
+        # choosing num_mirrors out of those mirrors. With "sort", the mirrors are
+        # sorted by their score and the first num_mirrors mirrors are selected. With
+        # "random", a random selection of num_mirrors are selected.  Choose "sort"
+        # if you want to increase the likelihood of having a fast and up-to-date
+        # mirror. Choose "random" if you want to avoid to always use the same
+        # mirror, and instead balance the load among many mirrors.
+        mirrors_random_or_sort = "sort"
+        # timeout, in milliseconds, when testing the mirrors' performance.
+        # Mirros which exceed the timeout will not be considered further, regardless
+        # of their score.
+        timeout = 500
+        # If mirrors are chosen automatically, this setting allows to define how
+        # often the selection process should be repeated. Valid values are positive
+        # numbers (for instance, 24 to rerun the selection process every 24 hours),
+        # and -1 to never re-run the selection process.
+        test_interval = 24
+---
+# Source: cpcache/templates/deployment.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cpcache-pvc
+  namespace: cpcache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  # volumeName: cpcache-vol-pv
+  storageClassName: longhorn
+---
+# Source: cpcache/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cpcache
+  namespace: cpcache
+  labels:
+    helm.sh/chart: cpcache-0.1.0
+    app.kubernetes.io/name: cpcache
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7070
+      targetPort: 7070
+      protocol: TCP
+      name: http
+      nodePort: 
+  selector:
+    app.kubernetes.io/name: cpcache
+    app.kubernetes.io/instance: RELEASE-NAME
+---
+# Source: cpcache/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpcache
+  namespace: cpcache
+  labels:
+    helm.sh/chart: cpcache-0.1.0
+    app.kubernetes.io/name: cpcache
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  # serviceName: cpcache-svc
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cpcache
+      app.kubernetes.io/instance: RELEASE-NAME
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cpcache
+        app.kubernetes.io/instance: RELEASE-NAME
+    spec:
+      # serviceAccountName: default
+      securityContext:
+        {}
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: pre-mount-vol
+          image: alpine:latest
+          command: [ "/bin/sh", "-c" ]
+          args: ["mkdir -p /var/cache/cpcache/state; mkdir /etc/cpcache; mkdir -p /var/cache/cpcache/pkg/community/os/x86_64; mkdir -p /var/cache/cpcache/pkg/community-staging/os/x86_64; mkdir -p /var/cache/cpcache/pkg/community-testing/os/x86_64; mkdir -p /var/cache/cpcache/pkg/core/os/x86_64; mkdir -p /var/cache/cpcache/pkg/extra/os/x86_64; mkdir -p /var/cache/cpcache/pkg/gnome-unstable/os/x86_64; mkdir -p /var/cache/cpcache/pkg/kde-unstable/os/x86_64; mkdir -p /var/cache/cpcache/pkg/multilib/os/x86_64; mkdir -p /var/cache/cpcache/pkg/multilib-testing/os/x86_64; mkdir -p /var/cache/cpcache/pkg/staging/os/x86_64; mkdir -p /var/cache/cpcache/pkg/testing/os/x86_64"]
+          volumeMounts:
+          - name: cpcache-pv
+            mountPath: "/var/cache/cpcache" # /var/cache/cpcache
+      # volumes:
+      # - name: cpcache-pv
+      #   persistentVolumeClaim:
+      #     claimName: cpcache-pvc
+      containers:
+        - name: cpcache
+          stdin: true
+          tty: true
+          securityContext:
+            {}
+          image: "improwised/cpcache:latest"
+          imagePullPolicy: Always
+          env:
+          - name: MIX_ENV
+            value: "prod"
+          # command: ["/bin/sh"] 
+          # args: ["-c", "chown -R cpcache:cpcache /var/cache/cpcache"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+          volumeMounts:
+          - name: cpcache-pv
+            mountPath: /var/cache/cpcache
+            # subPath: 
+          - name: cpcache-configuration
+            mountPath: /etc/cpcache/
+          ports:
+            - name: http
+              containerPort: 7070
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            limits:
+              cpu: 300m
+              memory: 300Mi
+            requests:
+              cpu: 250m
+              memory: 250Mi
+      volumes:
+      - name: cpcache-pv
+        persistentVolumeClaim:
+          claimName: cpcache-pvc
+      - name: cpcache-configuration
+        configMap:
+          name: cpcache-configmap
+---
+# Source: cpcache/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: cpcache
+  namespace: cpcache
+  labels:
+    helm.sh/chart: cpcache-0.1.0
+    app.kubernetes.io/name: cpcache
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "pacman-mirror.improwised.local"
+      http:
+        paths:
+        - backend:
+            serviceName: cpcache
+            servicePort: 7070
+---
+# Source: cpcache/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "RELEASE-NAME-cpcache-test-connection"
+  labels:
+
+    helm.sh/chart: cpcache-0.1.0
+    app.kubernetes.io/name: cpcache
+    app.kubernetes.io/instance: RELEASE-NAME
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['RELEASE-NAME-cpcache:7070']
+  restartPolicy: Never
